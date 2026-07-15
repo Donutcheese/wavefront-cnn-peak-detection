@@ -39,6 +39,12 @@
 
 ## 图片与结果展示
 
+### PyQt Gold 标注客户端
+
+阶段 1 数据集 v2 重建配套的人工 Gold 标注客户端已放入 [annotation_tool](annotation_tool)，支持 `.all/.vall` 三相波形浏览、自动伪标签对照、卡尺标注、框线区间、导数辅助和 `gold_labels.csv` 实时落盘。
+
+![PyQt Gold 标注客户端](docs/assets/annotation_tool_gold_client.png)
+
 ### 数据集标签审计
 
 ![标签审计](docs/assets/label_audit.png)
@@ -67,6 +73,7 @@
 ├── docs/
 │   ├── assets/                         # README 和报告引用的图片
 │   └── reports/                        # 技术分析与后续方案
+├── annotation_tool/                     # PyQt/PySide6 Gold 人工标注客户端
 ├── machine_learning/wavefront_cnn/
 │   ├── wavefront_cnn_m5_all_in_one.ipynb
 │   ├── wavefront_cnn_colab_all_in_one.ipynb
@@ -80,6 +87,21 @@
 > 说明：原始波形 HDF5、数据清单、模型权重、ONNX、zip 等大文件或含本机数据路径的文件默认不纳入 Git。公开仓库保留源码、Notebook、报告、训练摘要和关键图片，便于后续继续开发与复现实验结论。
 
 ## 推荐开发环境
+
+Gold 标注客户端：
+
+```bash
+cd annotation_tool
+conda env create -f environment.yml
+conda activate pyqt
+python -m wavefront_annotator /path/to/录波目录
+```
+
+也可以直接使用启动脚本：
+
+```bash
+./annotation_tool/run_annotator.sh /path/to/录波目录
+```
 
 Apple Silicon 本地训练优先使用 `m5` 环境：
 

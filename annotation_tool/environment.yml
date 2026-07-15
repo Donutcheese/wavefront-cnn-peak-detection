@@ -1,0 +1,14 @@
+# conda 环境定义：macOS / Windows 通用
+# 创建: conda env create -f environment.yml
+# 更新: conda env update -f environment.yml --prune
+name: pyqt
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - PySide6>=6.6
+      - pyqtgraph>=0.13.3
+      - numpy>=1.24
+      - pandas>=2.0

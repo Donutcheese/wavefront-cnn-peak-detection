@@ -23,6 +23,10 @@ wavefront_cnn_colab_results.zip
 wavefront_stage0_analysis/*.csv
 wavefront_stage0_analysis/*.json
 
+# Annotation tool local artifacts (raw recordings and personal labels stay local)
+annotation_tool/tests/sample_data/
+gold_labels.csv
+
 # Local experiment scratch outputs
 runs/
 outputs/
