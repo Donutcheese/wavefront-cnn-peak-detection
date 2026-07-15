@@ -1,0 +1,30 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Python / ML environments
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Large local datasets and model artifacts
+*.h5
+*.pt
+*.pth
+*.onnx
+*.zip
+
+# Keep lightweight result summaries, but do not publish raw waveform tensors or checkpoints.
+data/
+wavefront_cnn_results/*.pt
+wavefront_cnn_colab_results.zip
+wavefront_stage0_analysis/*.csv
+wavefront_stage0_analysis/*.json
+
+# Local experiment scratch outputs
+runs/
+outputs/
+wandb/
+mlruns/

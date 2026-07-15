@@ -1,0 +1,53 @@
+{
+  "created_at": "2026-07-15T07:08:32.873731+00:00",
+  "source_output_dir": "/content/wavefront_colab_package/data/derived/wavefront_cnn_coarse_fine_run",
+  "required_files": [
+    "test_predictions.csv",
+    "test_metrics.json",
+    "best_finetune.pt",
+    "training_history.csv"
+  ],
+  "file_count": 8,
+  "files": [
+    {
+      "path": "best_finetune.pt",
+      "size_bytes": 20753907,
+      "sha256": "9670d519d4c5470253fe5a4fa1bd5c0dd9e61a57e20be2e4876bb13b4e91b873"
+    },
+    {
+      "path": "best_pretrain.pt",
+      "size_bytes": 24243931,
+      "sha256": "06cfa5dae64067b869d61e1bb5f70517a3c0747429a4bed53f1387e0c95d90df"
+    },
+    {
+      "path": "last_finetune.pt",
+      "size_bytes": 24243931,
+      "sha256": "976046bb2e934f35f5b45334c103d37769b729feae9fee39955a82eed4e58cf1"
+    },
+    {
+      "path": "last_pretrain.pt",
+      "size_bytes": 24243931,
+      "sha256": "b3af442c4334fa6f3aff72019772c123c149704b1d71a8a384f14468ba661773"
+    },
+    {
+      "path": "test_metrics.json",
+      "size_bytes": 1408,
+      "sha256": "027bfeb99ff22ebaa0114fac74b7eee5e8892bf8d33565b3263d57411653cab4"
+    },
+    {
+      "path": "test_predictions.csv",
+      "size_bytes": 41906,
+      "sha256": "471e7d4046666338c1660b61dfaf1b0af7c0abcfd063aa332140bd0306651759"
+    },
+    {
+      "path": "training_dashboard.png",
+      "size_bytes": 262951,
+      "sha256": "8420ae3d40c6bb4cd6595c96d88e79309b6f95dd8b8744f4ab25bf2a2e71d0e6"
+    },
+    {
+      "path": "training_history.csv",
+      "size_bytes": 14378,
+      "sha256": "1f3907fb856025a325a345dbf7ba3a5ecf40928e89e4ebbd262e0985207f591f"
+    }
+  ]
+}

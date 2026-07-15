@@ -1,0 +1,45 @@
+{
+  "device": "cuda",
+  "pretrain_checkpoint": "/content/wavefront_colab_package/data/derived/wavefront_cnn_coarse_fine_run/best_pretrain.pt",
+  "finetune_checkpoint": "/content/wavefront_colab_package/data/derived/wavefront_cnn_coarse_fine_run/best_finetune.pt",
+  "test_metrics": {
+    "count": 543,
+    "mae_samples": 649.8964233398438,
+    "rmse_samples": 1358.439208984375,
+    "p95_samples": 3313.67236328125,
+    "mae_us": 519.917138671875,
+    "p95_us": 2650.937890625,
+    "within_1_samples": 0.18232044577598572,
+    "within_2_samples": 0.31675875186920166,
+    "within_4_samples": 0.4861878454685211,
+    "within_8_samples": 0.5856353640556335,
+    "within_16_samples": 0.6427255868911743,
+    "loss": 2.618017407024608
+  },
+  "config": {
+    "dataset_dir": "/content/wavefront_colab_package/data/derived/wavefront_dataset_v1",
+    "output_dir": "/content/wavefront_colab_package/data/derived/wavefront_cnn_coarse_fine_run",
+    "seed": 42,
+    "base_channels": 32,
+    "bottleneck_dilations": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "num_bins": 256,
+    "batch_size": 32,
+    "num_workers": 0,
+    "heatmap_sigma": 6.0,
+    "max_shift": 192,
+    "pretrain_epochs": 40,
+    "finetune_epochs": 60,
+    "freeze_epochs": 5,
+    "pretrain_lr": 0.002,
+    "finetune_lr": 0.0005,
+    "weight_decay": 0.0001,
+    "patience": 10,
+    "sampling_rate_hz": 1250000.0,
+    "window_samples": 8192
+  }
+}
