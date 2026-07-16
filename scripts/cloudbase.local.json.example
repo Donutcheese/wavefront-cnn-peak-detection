@@ -1,0 +1,14 @@
+{
+  "backend": "local_mirror",
+  "env_id": "your-env-id",
+  "secret_id": "",
+  "secret_key": "",
+  "session_token": "",
+  "region": "ap-shanghai",
+  "dataset": "ningxia",
+  "storage_key": "wavefront/ningxia/signals/waveforms.h5",
+  "samples_collection": "wf_samples",
+  "labels_collection": "wf_phase_labels",
+  "mirror_root": "",
+  "timeout_s": 120
+}

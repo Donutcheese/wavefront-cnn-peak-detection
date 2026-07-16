@@ -1,0 +1,93 @@
+digraph WavefrontAnnotatorKit {
+    graph [
+        rankdir=TB
+        bgcolor="#F8FAFC"
+        fontname="Microsoft YaHei"
+        fontsize=14
+        label="行波波头 Gold 标注 — 软件与分发流程图\n便携 Kit / exe / CloudBase 云同步"
+        labelloc=t
+        pad=0.4
+    ];
+    nodesep=0.35
+    ranksep=0.45
+    node [
+        shape=box
+        style="rounded,filled"
+        fontname="Microsoft YaHei"
+        fontsize=11
+        color="#334155"
+        fillcolor="#FFFFFF"
+        penwidth=1.2
+    ];
+    edge [
+        fontname="Microsoft YaHei"
+        fontsize=10
+        color="#64748B"
+    ];
+
+    subgraph cluster_kit {
+        label="标注组分发包 WavefrontAnnotatorKit（勿拆目录）"
+        style="dashed,rounded"
+        color="#0EA5E9"
+        fontname="Microsoft YaHei"
+        fontsize=11
+        kit [label="同目录即用\n.exe + cloudbase.local.json\n+ hisdata/(相对路径 .all)\n+ wavefront_dataset_ningxia_core/\n+ operator.txt" fillcolor="#E0F2FE"];
+    }
+
+    start [label="启动\n双击 WavefrontGoldAnnotator.exe" shape=oval fillcolor="#DBEAFE"];
+    operator [label="读取标注员\noperator.txt / 环境变量\nWAVEFRONT_ANNOTATOR" fillcolor="#E0E7FF"];
+    init [label="初始化 UI\nPySide6 + pyqtgraph" fillcolor="#E0E7FF"];
+    cloud_init [label="联立 CloudBase\ndataset=ningxia_core" fillcolor="#FEF3C7"];
+    cloud_ok [label="云同步就绪？" shape=diamond fillcolor="#FEF9C3"];
+    pull [label="Pull 云标签\nwf_phase_labels" fillcolor="#D1FAE5"];
+    cloud_fail [label="降级：仅本地标注\n状态栏提示原因" fillcolor="#FEE2E2"];
+
+    load_mode [label="数据加载方式" shape=diamond fillcolor="#FEF9C3"];
+    load_core [label="加载核心拓扑集\ncore_file_index.csv\nsource_path → Kit相对 hisdata/" fillcolor="#DCFCE7"];
+    load_dir [label="打开任意录波目录\n递归扫描 .all/.vall" fillcolor="#E0F2FE"];
+    load_auto [label="自动标签对照\nphase_labels.csv" fillcolor="#F3E8FF"];
+
+    select [label="选择文件\n列表按优先级排序" fillcolor="#FFFFFF"];
+    decode [label="解码 .all/.vall\n三相波形 + 采样率" fillcolor="#FFEDD5"];
+    view [label="波形可视化\nA/B/C 切换 · 卡尺 · |di/dt|\n框线区间 R" fillcolor="#ECFEFF"];
+    annotate [label="人工判定\nG=gold / U=unsure / X=reject" fillcolor="#FCE7F3"];
+    save [label="保存 (Space)\nannotator_data/gold_labels.csv" fillcolor="#DBEAFE"];
+    upload [label="云同步开启？" shape=diamond fillcolor="#FEF9C3"];
+    upsert [label="Upsert 云端\nwf_phase_labels\n含 annotator 字段" fillcolor="#D1FAE5"];
+    next [label="Enter：保存并下一文件" fillcolor="#F1F5F9"];
+
+    subgraph cluster_offline {
+        label="工程侧脚本（非标注员日常）"
+        style="dashed,rounded"
+        color="#94A3B8"
+        fontname="Microsoft YaHei"
+        fontsize=11
+        build [label="拓扑筛选入库\nSVG∩Excel → ningxia_core" fillcolor="#F8FAFC"];
+        push [label="push 脚本\nh5 + samples/labels → 云" fillcolor="#F8FAFC"];
+        pack [label="build_annotator_kit\n组装便携 Kit" fillcolor="#F8FAFC"];
+        train [label="CNN 训练\n读 h5 + 金标" fillcolor="#F8FAFC"];
+        build -> push -> pack [style=dashed];
+        push -> train [style=dashed];
+    }
+
+    kit -> start;
+    start -> operator -> init -> cloud_init -> cloud_ok;
+    cloud_ok -> pull [label="是"];
+    cloud_ok -> cloud_fail [label="否"];
+    pull -> load_mode;
+    cloud_fail -> load_mode;
+    load_mode -> load_core [label="默认/工具栏"];
+    load_mode -> load_dir [label="打开目录"];
+    load_core -> load_auto;
+    load_dir -> load_auto;
+    load_auto -> select;
+    select -> decode -> view -> annotate -> save -> upload;
+    upload -> upsert [label="是"];
+    upload -> next [label="否"];
+    upsert -> next;
+    next -> select [label="继续"];
+
+    pack -> kit [style=dashed label="分发"];
+    push -> cloud_init [style=dashed constraint=false label="预置云数据"];
+    upsert -> train [style=dashed constraint=false xlabel="pull 金标后训练"];
+}

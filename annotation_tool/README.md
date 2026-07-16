@@ -3,6 +3,15 @@
 面向本仓库阶段 1（数据集 v2 重建）的人工复核客户端，用于建立 gold 标签集。
 技术栈：`PySide6` + `pyqtgraph`，Windows / macOS / Linux 通用。
 
+当前默认联立 CloudBase 拓扑核心集 `ningxia_core`：启动拉取云标签，保存时写入本地 `annotator_data/gold_labels.csv` 并 upsert 云端。
+
+## 软件流程图
+
+![标注工具软件与分发流程](../docs/reports/annotator_software_flowchart.svg)
+
+- 源文件：[`annotator_software_flowchart.dot`](../docs/reports/annotator_software_flowchart.dot)
+- PNG：[`annotator_software_flowchart.png`](../docs/reports/annotator_software_flowchart.png)
+
 ![界面截图](../docs/assets/annotation_tool_gold_client.png)
 
 ## 功能
@@ -10,13 +19,16 @@
 | 功能 | 说明 |
 |---|---|
 | 目录选择 | 递归扫描所选目录下全部 `.all` / `.vall` 录波文件 |
-| 波形可视化 | **ABC 单窗切换**：主图同一时刻只显示活动相；下方 `A 相 / B 相 / C 相` 按钮或 `1/2/3` 换相；各相卡尺与区间状态独立保留 |
+| 核心拓扑集 | 工具栏「加载核心拓扑集」：按 `core_file_index.csv` 解析路径（支持 Kit 内相对 `hisdata/`） |
+| 云同步 | 启动 Pull / 保存 Upsert `wf_phase_labels`；密钥放 exe 旁 `cloudbase.local.json`（不入库） |
+| 标注员 | `operator.txt` 或环境变量 `WAVEFRONT_ANNOTATOR` |
+| 波形可视化 | **ABC 单窗切换**：主图同一时刻只显示活动相；下方相按钮或 `1/2/3` 换相 |
 | 卡尺标注 | 每相一条可拖动红色卡尺，双击落点，←/→ 逐点微调（Shift 步长 10） |
-| 框线区间 | `R` 键在卡尺附近开/关 `LinearRegionItem`，用于圈定搜索窗或存疑范围 |
+| 框线区间 | `R` 键在卡尺附近开/关 `LinearRegionItem` |
 | 导数辅助 | 可叠加 &#124;di/dt&#124; 曲线，辅助定位波头突变沿 |
-| 自动标签对照 | 可加载 `phase_labels.csv`（紫色点划线 + 各检测器候选虚线）、`review_queue.csv`、`stage0_worst30.csv`，文件列表按复核优先级排序 |
-| CSV 同步 | 每次保存立即原子写入录波目录下的 `gold_labels.csv`（临时文件 + 替换，崩溃不丢数据），主键 `(file_name, phase)` upsert |
-| 应用图标 | 开发运行与打包产物共用 `wavefront_annotator/assets/app_icon.*`（窗口 / 任务栏 / exe 图标） |
+| 自动标签对照 | 可加载 `phase_labels.csv` / `review_queue.csv` / `stage0_worst30.csv` |
+| CSV 同步 | 每次保存原子写入 `annotator_data/gold_labels.csv`，主键 `(file_name, phase)` upsert |
+| 应用图标 | 开发运行与打包产物共用 `wavefront_annotator/assets/app_icon.*` |
 
 ## 安装与启动
 
@@ -44,17 +56,29 @@ python -m venv .venv
 run_annotator.bat
 ```
 
-## 打包（嵌入应用图标）
+## 打包与便携 Kit
 
 ```bash
-# macOS / Linux
-./build_annotator.sh
-
-# Windows
+# 仅 exe（含云模块）
 build_annotator.bat
+
+# exe + 相对路径索引 + 核心 .all → dist/WavefrontAnnotatorKit/
+build_annotator_kit.bat
 ```
 
-产物位于 `dist/WavefrontGoldAnnotator`（Windows 为 `.exe`）。PyInstaller 规格 `wavefront_annotator.spec` 已将 `assets/app_icon.ico`（或 PNG）写入可执行文件图标，并打包 `assets/` 供运行时 `QApplication` / 主窗口加载。
+Kit 目录结构（整夹分发，**勿拆开**）：
+
+```text
+WavefrontAnnotatorKit/
+  WavefrontGoldAnnotator.exe
+  cloudbase.local.json      # 本地放置，勿提交 Git
+  operator.txt
+  hisdata/                  # 核心集 .all（相对路径）
+  wavefront_dataset_ningxia_core/
+  annotator_data/
+```
+
+`dist/` 与 Kit 大文件已被 `.gitignore` 排除，不会推送到远程。
 
 命令行直接指定目录与参考 CSV：
 
@@ -94,11 +118,11 @@ build_annotator.bat
 
 ## 标注流程建议（对接优化方案阶段 1）
 
-1. 加载三个参考 CSV，列表自动置顶“最差样本”和“复核队列”。
-2. 优先标注红色高亮文件；打开导数辅助，双击首个陡峭突变沿，微调卡尺。
-3. 波头清晰 → `G`；多候选难以判定 → `U` 并用 `R` 圈定候选区间；坏波形/无波头 → `X`。
-4. `Enter` 保存并进入下一个文件；`gold_labels.csv` 实时落盘。
-5. 后续数据集 v2 重建脚本直接消费 `gold_labels.csv` 的 `raw` 坐标，与固定物理搜索窗方案对接。
+1. 编辑 `operator.txt` 为本人名字；启动后确认状态栏云联立成功。
+2. 默认加载核心拓扑集；必要时工具栏「拉取云标签」刷新。
+3. 优先标注高优先级文件；打开导数辅助，双击首个陡峭突变沿，微调卡尺。
+4. 波头清晰 → `G`；多候选难以判定 → `U` 并用 `R` 圈定候选区间；坏波形/无波头 → `X`。
+5. `Enter` 保存并进入下一个文件；本地 CSV 与云端同步落盘。
 
 ## 测试
 

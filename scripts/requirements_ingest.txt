@@ -1,0 +1,8 @@
+# P1/P2 入库与同步脚本依赖（建议使用 annotation_tool/.venv）
+numpy>=1.24
+pandas>=2.0
+h5py>=3.10
+scipy>=1.11
+PyWavelets>=1.5
+openpyxl>=3.1
+requests>=2.31

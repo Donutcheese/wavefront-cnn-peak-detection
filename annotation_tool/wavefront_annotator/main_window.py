@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import getpass
 import traceback
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QButtonGroup,
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -24,7 +24,6 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QSizePolicy,
     QSplitter,
     QStatusBar,
     QVBoxLayout,
@@ -33,37 +32,49 @@ from PySide6.QtWidgets import (
 
 from .all_decoder import WaveRecord, decode_all_file
 from .auto_labels import AutoLabelIndex
+from .glass_segmented import GlassSegmentedControl
 from .label_store import GoldLabel, GoldLabelStore
 from .resources import load_app_icon
+from .theme import DONE_HEX, PARTIAL_HEX, PRIORITY_HEX, set_active_property
 from .waveform_view import PHASES, PHASE_COLORS, WaveformView
+from .win_mica import apply_mica_if_available
 
-# 相切换按钮：活动相高亮，其余弱化（贴近截图中的单窗切换交互）
-_PHASE_BTN_STYLE = """
-QPushButton {{
-    background-color: #2a3036;
-    color: #c5ccd3;
-    border: 1px solid #3a424a;
-    border-radius: 4px;
-    padding: 10px 0;
-    font-size: 14px;
-    font-weight: 600;
-}}
-QPushButton:hover {{
-    background-color: #343b42;
-    border-color: {accent};
-}}
-QPushButton:checked {{
-    background-color: #6b2d3c;
-    color: #ffffff;
-    border-color: {accent};
-}}
-"""
+try:
+    from sync.cloud_label_sync import (
+        HARDCODED_ANNOTATOR,
+        HARDCODED_DATASET,
+        CloudLabelSync,
+        get_default_core_dir,
+    )
+    from sync.runtime_paths import (
+        resolve_all_source_path,
+        resolve_operator_name,
+        resolve_writable_label_dir,
+    )
+except Exception:  # noqa: BLE001 - 无同步依赖时仍可本地标注
+    CloudLabelSync = None  # type: ignore[misc, assignment]
+    HARDCODED_ANNOTATOR = getpass.getuser()
+    HARDCODED_DATASET = "local"
+
+    def get_default_core_dir() -> Path:
+        return Path()
+
+    def resolve_writable_label_dir() -> Path:
+        return Path.cwd() / "annotator_data"
+
+    def resolve_all_source_path(source_path: str | Path) -> Path | None:
+        path = Path(source_path)
+        return path if path.is_file() else None
+
+    def resolve_operator_name(default: str = HARDCODED_ANNOTATOR) -> str:
+        return default
+
 
 PRIORITY_TEXT = {0: "最差样本", 1: "复核队列", 2: ""}
 STATUS_TEXT = {"gold": "✔ gold", "unsure": "? 存疑", "reject": "✘ 拒绝"}
-DONE_COLOR = QColor("#2e7d32")
-PARTIAL_COLOR = QColor("#f9a825")
-PRIORITY_COLOR = QColor("#c62828")
+DONE_COLOR = QColor(DONE_HEX)
+PARTIAL_COLOR = QColor(PARTIAL_HEX)
+PRIORITY_COLOR = QColor(PRIORITY_HEX)
 
 
 class PhaseAnnotationPanel(QGroupBox):
@@ -96,6 +107,21 @@ class PhaseAnnotationPanel(QGroupBox):
         self.status_combo.setCurrentIndex(index)
 
 
+class _PhaseButtonAdapter:
+    """兼容旧接口 phase_buttons[phase].isChecked()。"""
+
+    def __init__(self, control: GlassSegmentedControl, phase: str) -> None:
+        self._control = control
+        self._phase = phase
+
+    def isChecked(self) -> bool:
+        return self._control.currentValue() == self._phase
+
+    def setChecked(self, checked: bool) -> None:
+        if checked:
+            self._control.setCurrentValue(self._phase)
+
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -108,21 +134,43 @@ class MainWindow(QMainWindow):
         self.files: list[Path] = []
         self.current_record: WaveRecord | None = None
         self.current_row = -1
-        self.annotator = getpass.getuser()
+        self.annotator = resolve_operator_name(HARDCODED_ANNOTATOR)
+        self.cloud_sync: CloudLabelSync | None = None
+        self.core_dir = get_default_core_dir()
+        if not (Path(self.core_dir) / "core_file_index.csv").is_file():
+            self.core_dir = None
+        self._cloud_status = "云同步未启用"
 
+        self._backdrop_mode = "none"
         self._build_ui()
         self._build_shortcuts()
         self._sync_phase_buttons("A")
+        self._init_cloud_sync()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        # winId 在 show 后才稳定；Win10 自动降级为深色标题栏，不强制 Mica
+        if self._backdrop_mode == "none":
+            self._backdrop_mode = apply_mica_if_available(self)
 
     # ---------- UI 构建 ----------
 
     def _build_ui(self) -> None:
         toolbar = self.addToolBar("main")
         toolbar.setMovable(False)
+        toolbar.setFloatable(False)
 
         open_action = QAction("打开录波目录…", self)
         open_action.triggered.connect(self.choose_directory)
         toolbar.addAction(open_action)
+
+        core_action = QAction("加载核心拓扑集", self)
+        core_action.triggered.connect(self.load_core_dataset)
+        toolbar.addAction(core_action)
+
+        pull_action = QAction("拉取云标签", self)
+        pull_action.triggered.connect(self.pull_cloud_labels)
+        toolbar.addAction(pull_action)
 
         load_auto_action = QAction("加载自动标签CSV…", self)
         load_auto_action.triggered.connect(self.choose_auto_labels)
@@ -139,13 +187,19 @@ class MainWindow(QMainWindow):
 
         # 左侧：文件列表
         left_panel = QWidget()
+        left_panel.setObjectName("sidePanel")
         left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(4, 4, 4, 4)
+        left_layout.setContentsMargins(10, 10, 8, 10)
+        left_layout.setSpacing(8)
+        side_title = QLabel("录波文件")
+        side_title.setStyleSheet("color: #9AA7B5; font-weight: 600; padding: 0 2px;")
         self.filter_edit = QLineEdit()
         self.filter_edit.setPlaceholderText("过滤文件名…")
+        self.filter_edit.setClearButtonEnabled(True)
         self.filter_edit.textChanged.connect(self._apply_filter)
         self.file_list = QListWidget()
         self.file_list.currentRowChanged.connect(self._on_file_selected)
+        left_layout.addWidget(side_title)
         left_layout.addWidget(self.filter_edit)
         left_layout.addWidget(self.file_list)
 
@@ -154,29 +208,23 @@ class MainWindow(QMainWindow):
         self.waveform_view.goldChanged.connect(self._on_gold_changed)
         self.waveform_view.phaseFocused.connect(self._on_phase_focused)
 
-        # 相切换条：同一时刻只展开一相，避免三联图挤占标注精度
-        phase_switch = QWidget()
-        phase_switch_layout = QHBoxLayout(phase_switch)
-        phase_switch_layout.setContentsMargins(4, 4, 4, 2)
-        phase_switch_layout.setSpacing(8)
-        self.phase_button_group = QButtonGroup(self)
-        self.phase_button_group.setExclusive(True)
-        self.phase_buttons: dict[str, QPushButton] = {}
-        for phase in PHASES:
-            button = QPushButton(f"{phase} 相")
-            button.setCheckable(True)
-            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-            button.setMinimumHeight(40)
-            button.setStyleSheet(_PHASE_BTN_STYLE.format(accent=PHASE_COLORS[phase]))
-            button.clicked.connect(lambda _checked=False, p=phase: self._focus_phase(p))
-            self.phase_button_group.addButton(button)
-            self.phase_buttons[phase] = button
-            phase_switch_layout.addWidget(button)
+        # 毛玻璃分段切换：同一时刻只展开一相
+        self.phase_switch = GlassSegmentedControl(
+            labels=[f"{p} 相" for p in PHASES],
+            values=list(PHASES),
+        )
+        self.phase_switch.setAccentColor(PHASE_COLORS["A"])
+        self.phase_switch.currentChanged.connect(self._focus_phase)
+        # 兼容旧测试：phase_buttons[phase].isChecked()
+        self.phase_buttons = {
+            phase: _PhaseButtonAdapter(self.phase_switch, phase) for phase in PHASES
+        }
 
         # 底部：三相标注面板 + 操作按钮（面板始终可见，便于跨相对照）
         bottom = QWidget()
         bottom_layout = QHBoxLayout(bottom)
-        bottom_layout.setContentsMargins(4, 2, 4, 2)
+        bottom_layout.setContentsMargins(8, 4, 8, 8)
+        bottom_layout.setSpacing(10)
         self.phase_panels: dict[str, PhaseAnnotationPanel] = {}
         for phase in PHASES:
             panel = PhaseAnnotationPanel(phase)
@@ -185,22 +233,27 @@ class MainWindow(QMainWindow):
             bottom_layout.addWidget(panel, stretch=1)
 
         button_column = QVBoxLayout()
+        button_column.setSpacing(8)
         self.save_button = QPushButton("保存 (Space)")
+        self.save_button.setObjectName("primaryButton")
         self.save_button.clicked.connect(self.save_current)
         self.save_next_button = QPushButton("保存并下一个 (Enter)")
+        self.save_next_button.setObjectName("ctaButton")
         self.save_next_button.clicked.connect(self.save_and_next)
         self.region_button = QPushButton("框线区间开/关 (R)")
         self.region_button.clicked.connect(self._toggle_region)
         button_column.addWidget(self.save_button)
         button_column.addWidget(self.save_next_button)
         button_column.addWidget(self.region_button)
+        button_column.addStretch(1)
         bottom_layout.addLayout(button_column)
 
         center = QWidget()
         center_layout = QVBoxLayout(center)
-        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setContentsMargins(8, 8, 10, 4)
+        center_layout.setSpacing(8)
         center_layout.addWidget(self.waveform_view, stretch=1)
-        center_layout.addWidget(phase_switch)
+        center_layout.addWidget(self.phase_switch)
         center_layout.addWidget(bottom)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -247,6 +300,131 @@ class MainWindow(QMainWindow):
             return
         self.load_directory(Path(directory))
 
+    def _init_cloud_sync(self) -> None:
+        if CloudLabelSync is None:
+            self._cloud_status = "云同步模块不可用"
+            return
+        try:
+            self.cloud_sync = CloudLabelSync()
+            if self.core_dir is not None:
+                self.cloud_sync.load_file_index(self.core_dir)
+            pulled = self.cloud_sync.pull_labels()
+            self._cloud_status = (
+                f"已联立 {HARDCODED_DATASET}@{self.cloud_sync.config.env_id}；"
+                f"用户={self.annotator}；云标签={pulled}"
+            )
+        except Exception as exc:  # noqa: BLE001
+            traceback.print_exc()
+            self.cloud_sync = None
+            self._cloud_status = f"云同步初始化失败: {exc}"
+
+    def load_core_dataset(self) -> None:
+        """打开拓扑核心集：按 core_file_index.csv 加载 .all（支持相对 Kit 路径）。"""
+        core_dir = Path(self.core_dir or get_default_core_dir())
+        index_path = core_dir / "core_file_index.csv"
+        if not index_path.is_file():
+            QMessageBox.warning(self, "核心集缺失", f"未找到:\n{index_path}")
+            return
+        import pandas as pd
+
+        table = pd.read_csv(index_path)
+        files: list[Path] = []
+        missing = 0
+        for _, row in table.iterrows():
+            path = resolve_all_source_path(str(row["source_path"]))
+            if path is not None:
+                files.append(path)
+            else:
+                missing += 1
+        if not files:
+            QMessageBox.warning(
+                self,
+                "核心集为空",
+                "索引中没有任何可读 .all 文件。\n"
+                "请确认 Kit 目录含 hisdata/，或本机绝对路径仍有效。",
+            )
+            return
+        if missing:
+            self._update_status(f"核心集缺文件 {missing} 个（已跳过）")
+        files = sorted(files, key=lambda p: (self.auto_index.priority_for(p.name), p.name))
+        self.files = files
+        # 金标写到 exe/工程旁可写目录，避免写入只读 _MEIPASS
+        label_dir = resolve_writable_label_dir()
+        self.store = GoldLabelStore(label_dir / "gold_labels.csv")
+        if self.cloud_sync is not None:
+            try:
+                self.cloud_sync.load_file_index(core_dir)
+                self._merge_cloud_into_local_store()
+            except Exception as exc:  # noqa: BLE001
+                traceback.print_exc()
+                self._update_status(f"云标签合并失败: {exc}")
+        phase_csv = core_dir / "phase_labels.csv"
+        if phase_csv.is_file():
+            try:
+                self.auto_index.load_phase_labels(phase_csv)
+            except Exception:  # noqa: BLE001
+                traceback.print_exc()
+        self._rebuild_file_list()
+        self.file_list.setCurrentRow(0)
+        self._update_status(
+            f"核心拓扑集 {len(files)} 个文件 | {self._cloud_status} | 本地金标 {label_dir / 'gold_labels.csv'}"
+        )
+
+    def pull_cloud_labels(self) -> None:
+        if self.cloud_sync is None:
+            self._init_cloud_sync()
+        if self.cloud_sync is None:
+            QMessageBox.warning(self, "云同步不可用", self._cloud_status)
+            return
+        try:
+            count = self.cloud_sync.pull_labels()
+            self._merge_cloud_into_local_store()
+            if self.current_record is not None:
+                self._restore_saved_labels(self.current_record)
+                self._refresh_phase_panels()
+            self._cloud_status = f"已拉取云标签 {count} 条（{HARDCODED_DATASET}）"
+            self._update_status(self._cloud_status)
+            self._rebuild_file_list()
+        except Exception as exc:  # noqa: BLE001
+            traceback.print_exc()
+            QMessageBox.critical(self, "拉取失败", str(exc))
+
+    def _merge_cloud_into_local_store(self) -> None:
+        if self.cloud_sync is None or self.store is None:
+            return
+        for (file_name, phase), label in self.cloud_sync.by_file_phase.items():
+            if label.label_status not in ("gold", "unsure", "reject"):
+                continue
+            if label.raw_wavefront_index is None:
+                continue
+            path = next((p for p in self.files if p.name == file_name), None)
+            fs = None
+            try:
+                # 尽量保留已有采样率
+                existing = self.store.get(file_name, phase)
+                if existing and existing.get("sampling_rate_hz") not in (None, ""):
+                    fs = float(existing["sampling_rate_hz"])
+            except Exception:  # noqa: BLE001
+                fs = None
+            gold_index = float(label.raw_wavefront_index)
+            time_us = (gold_index / fs * 1e6) if fs else 0.0
+            self.store.upsert(
+                GoldLabel(
+                    file_name=file_name,
+                    file_path=str(path) if path else file_name,
+                    phase=phase,
+                    gold_wavefront_index=gold_index,
+                    gold_time_us=round(time_us, 3),
+                    status=label.label_status,
+                    region_start_index=label.region_start_index,
+                    region_end_index=label.region_end_index,
+                    sampling_rate_hz=fs,
+                    annotator=label.annotator or HARDCODED_ANNOTATOR,
+                    note=label.note,
+                    updated_at=label.updated_at or datetime.now().isoformat(timespec="seconds"),
+                )
+            )
+
     def load_directory(self, directory: Path) -> None:
         files = sorted(
             [p for p in directory.rglob("*") if p.suffix.lower() in (".all", ".vall")],
@@ -257,10 +435,15 @@ class MainWindow(QMainWindow):
             return
         self.files = files
         self.store = GoldLabelStore(directory / "gold_labels.csv")
+        if self.cloud_sync is not None:
+            try:
+                self._merge_cloud_into_local_store()
+            except Exception:  # noqa: BLE001
+                traceback.print_exc()
         self._rebuild_file_list()
         self.file_list.setCurrentRow(0)
         self._update_status(
-            f"已加载 {len(files)} 个录波文件，gold 标签写入 {directory / 'gold_labels.csv'}"
+            f"已加载 {len(files)} 个录波文件，gold 标签写入 {directory / 'gold_labels.csv'} | {self._cloud_status}"
         )
 
     def choose_auto_labels(self) -> None:
@@ -408,12 +591,14 @@ class MainWindow(QMainWindow):
     def _on_phase_focused(self, phase: str) -> None:
         self._sync_phase_buttons(phase)
         for name, panel in self.phase_panels.items():
-            panel.setStyleSheet("QGroupBox { border: 1px solid #ff5252; }" if name == phase else "")
+            set_active_property(panel, name == phase)
 
     def _sync_phase_buttons(self, phase: str) -> None:
-        button = self.phase_buttons.get(phase)
-        if button is not None and not button.isChecked():
-            button.setChecked(True)
+        if self.phase_switch.currentValue() != phase:
+            self.phase_switch.blockSignals(True)
+            self.phase_switch.setCurrentValue(phase)
+            self.phase_switch.blockSignals(False)
+        self.phase_switch.setAccentColor(PHASE_COLORS.get(phase, PHASE_COLORS["A"]))
 
     def _focus_phase(self, phase: str) -> None:
         self.waveform_view.set_active_phase(phase, emit_focus=False)
@@ -489,6 +674,22 @@ class MainWindow(QMainWindow):
                     annotator=self.annotator,
                 )
             )
+            if self.cloud_sync is not None:
+                try:
+                    self.cloud_sync.upsert_annotation(
+                        file_name=record.file_name,
+                        phase=phase,
+                        status=status,
+                        raw_wavefront_index=float(round(position, 1)),
+                        region_start=round(bounds[0], 1) if bounds else None,
+                        region_end=round(bounds[1], 1) if bounds else None,
+                        sampling_rate_hz=record.sampling_rate_hz,
+                        annotator=self.annotator,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    traceback.print_exc()
+                    saved_phases.append(f"{phase}:云同步失败({exc})")
+                    continue
             saved_phases.append(f"{phase}:{STATUS_TEXT[status]}")
         if saved_phases:
             item = self.file_list.item(self.current_row)
@@ -496,7 +697,8 @@ class MainWindow(QMainWindow):
                 item.setText(self._file_item_text(self.files[self.current_row]))
                 self._style_item(item, self.files[self.current_row])
             self._update_status(
-                f"已保存 {record.file_name}  {'  '.join(saved_phases)}  （gold 总数 {self.store.count()}）"
+                f"已保存 {record.file_name}  {'  '.join(saved_phases)}  "
+                f"（gold 总数 {self.store.count()}）| {self._cloud_status}"
             )
         else:
             self._update_status("没有已设定状态的相，未写入。先用 G/U/X 或下拉框设定每相状态。")

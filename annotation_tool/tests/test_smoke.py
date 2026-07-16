@@ -157,10 +157,46 @@ def test_main_window_offscreen() -> None:
     window.close()
 
 
+def test_glass_segmented_and_win10_backdrop() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from wavefront_annotator.glass_segmented import GlassSegmentedControl
+    from wavefront_annotator.win_mica import (
+        apply_mica_if_available,
+        is_windows_11_or_newer,
+        supports_system_backdrop,
+    )
+
+    app = QApplication.instance() or QApplication([])
+    control = GlassSegmentedControl(labels=["A 相", "B 相", "C 相"], values=["A", "B", "C"])
+    assert control.currentValue() == "A"
+    control.setCurrentValue("C", animate=False)
+    assert control.currentValue() == "C"
+    assert control.currentIndex() == 2
+
+    # 离屏窗口：材质 API 可调用且不得抛异常；Win10 不应宣称已启用 Mica
+    from PySide6.QtWidgets import QMainWindow
+
+    window = QMainWindow()
+    window.show()
+    mode = apply_mica_if_available(window)
+    assert mode in {"mica", "dark_title", "none"}
+    if not supports_system_backdrop():
+        assert mode != "mica", "Win10 / 旧系统不应启用 SYSTEMBACKDROP Mica"
+    print(
+        f"glass+backdrop ok: mode={mode}, win11={is_windows_11_or_newer()}, "
+        f"backdrop_api={supports_system_backdrop()}"
+    )
+    control.close()
+    window.close()
+
+
 if __name__ == "__main__":
     test_decoder()
     test_label_store()
     test_app_icon_assets()
     test_phase_switch_view()
+    test_glass_segmented_and_win10_backdrop()
     test_main_window_offscreen()
     print("all smoke tests passed")

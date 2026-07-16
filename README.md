@@ -43,6 +43,14 @@
 
 阶段 1 数据集 v2 重建配套的人工 Gold 标注客户端已放入 [annotation_tool](annotation_tool)，支持 `.all/.vall` 录波浏览、**ABC 单窗切换标注**、自动伪标签对照、卡尺标注、框线区间、导数辅助、应用图标（开发/打包一致）和 `gold_labels.csv` 实时落盘。
 
+当前版本已联立腾讯云 CloudBase（`ningxia_core` 拓扑核心集）：启动可拉取云标签，保存时本地落盘并 upsert 云端。标注组分发请使用便携 Kit（`exe` + 相对路径 `hisdata/` + 索引，整夹拷贝即用），构建脚本见 `annotation_tool/build_annotator_kit.bat`；**仓库不提交 `dist/` 与 Kit 大文件**。
+
+软件与分发流程（Graphviz SVG）：
+
+![标注工具软件流程图](docs/reports/annotator_software_flowchart.svg)
+
+源文件：[annotator_software_flowchart.dot](docs/reports/annotator_software_flowchart.dot) · [PNG](docs/reports/annotator_software_flowchart.png)
+
 应用图标：
 
 ![标注工具 Logo](annotation_tool/wavefront_annotator/assets/app_icon_256.png)
@@ -78,8 +86,10 @@
 ├── README.md
 ├── docs/
 │   ├── assets/                         # README 和报告引用的图片
-│   └── reports/                        # 技术分析与后续方案
-├── annotation_tool/                     # PyQt/PySide6 Gold 人工标注客户端
+│   └── reports/                        # 技术分析、CloudBase 说明与流程图
+├── annotation_tool/                     # PyQt/PySide6 Gold 人工标注客户端 + 云同步
+│   └── sync/                           # CloudBase / 本地镜像适配层
+├── scripts/                             # 入库、推云、便携 Kit 组装脚本
 ├── machine_learning/wavefront_cnn/
 │   ├── wavefront_cnn_m5_all_in_one.ipynb
 │   ├── wavefront_cnn_colab_all_in_one.ipynb
@@ -90,7 +100,7 @@
 └── wavefront_stage0_analysis/           # 阶段 0 诊断报告与展示图
 ```
 
-> 说明：原始波形 HDF5、数据清单、模型权重、ONNX、zip 等大文件或含本机数据路径的文件默认不纳入 Git。公开仓库保留源码、Notebook、报告、训练摘要和关键图片，便于后续继续开发与复现实验结论。
+> 说明：原始波形 HDF5、数据清单、模型权重、ONNX、zip、`dist/` 便携 Kit（含 `.all` / exe）以及 `cloudbase.local.json` 等密钥或大文件默认不纳入 Git。公开仓库保留源码、Notebook、报告、训练摘要和关键图片，便于后续继续开发与复现实验结论。
 
 ## 推荐开发环境
 

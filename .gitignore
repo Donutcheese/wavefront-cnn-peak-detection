@@ -30,6 +30,16 @@ annotation_tool/build/
 annotation_tool/dist/
 annotation_tool/*.spec.bak
 
+# 本地打包产物与便携 Kit（含 .all / exe，勿入库）
+dist/
+**/WavefrontAnnotatorKit/
+
+# CloudBase secrets and local sync mirror
+**/cloudbase.local.json
+annotation_tool/sync/cloudbase.local.json
+scripts/cloudbase.local.json
+data/derived/cloudbase_mirror/
+
 # Local experiment scratch outputs
 runs/
 outputs/
