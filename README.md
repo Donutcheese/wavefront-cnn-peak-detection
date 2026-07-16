@@ -41,9 +41,15 @@
 
 ### PyQt Gold 标注客户端
 
-阶段 1 数据集 v2 重建配套的人工 Gold 标注客户端已放入 [annotation_tool](annotation_tool)，支持 `.all/.vall` 三相波形浏览、自动伪标签对照、卡尺标注、框线区间、导数辅助和 `gold_labels.csv` 实时落盘。
+阶段 1 数据集 v2 重建配套的人工 Gold 标注客户端已放入 [annotation_tool](annotation_tool)，支持 `.all/.vall` 录波浏览、**ABC 单窗切换标注**、自动伪标签对照、卡尺标注、框线区间、导数辅助、应用图标（开发/打包一致）和 `gold_labels.csv` 实时落盘。
 
-![PyQt Gold 标注客户端](docs/assets/annotation_tool_gold_client.png)
+应用图标：
+
+![标注工具 Logo](annotation_tool/wavefront_annotator/assets/app_icon_256.png)
+
+界面说明见 [annotation_tool/README.md](annotation_tool/README.md)。历史三联图截图仅供对照：
+
+![PyQt Gold 标注客户端（旧版三联图）](docs/assets/annotation_tool_gold_client.png)
 
 ### 数据集标签审计
 

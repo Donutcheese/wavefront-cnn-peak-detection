@@ -79,6 +79,52 @@ def test_label_store() -> None:
     print("label store ok: upsert 覆盖与原子落盘正常")
 
 
+def test_app_icon_assets() -> None:
+    from wavefront_annotator.resources import icon_ico_path, icon_png_path, load_app_icon
+
+    assert icon_png_path().exists(), "缺少 app_icon.png"
+    assert icon_ico_path().exists(), "缺少 app_icon.ico"
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance() or QApplication([])
+    icon = load_app_icon()
+    assert not icon.isNull(), "应用图标加载失败"
+    print(f"app icon ok: png={icon_png_path().name}, ico={icon_ico_path().name}")
+    if app is not None and QApplication.instance() is app:
+        pass
+
+
+def test_phase_switch_view() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from wavefront_annotator.waveform_view import PHASES, WaveformView
+
+    app = QApplication.instance() or QApplication([])
+    view = WaveformView()
+    signals = np.zeros((3, 1024), dtype=np.float64)
+    signals[0, 200] = 1.0
+    signals[1, 400] = 1.0
+    signals[2, 600] = 1.0
+    view.load_record(signals)
+    assert view.active_phase == "A"
+    assert view.phase_plots["A"].plot.isVisible()
+    assert not view.phase_plots["B"].plot.isVisible()
+    assert not view.phase_plots["C"].plot.isVisible()
+    view.set_active_phase("B")
+    assert view.active_phase == "B"
+    assert view.phase_plots["B"].plot.isVisible()
+    assert not view.phase_plots["A"].plot.isVisible()
+    for phase in PHASES:
+        view.phase_plots[phase].set_gold(100.0 + ord(phase))
+    view.set_active_phase("C")
+    assert view.phase_plots["A"].gold_position() == 100.0 + ord("A")
+    assert view.phase_plots["C"].gold_position() == 100.0 + ord("C")
+    print("phase switch ok: 单窗切换且各相卡尺状态独立保留")
+    view.close()
+
+
 def test_main_window_offscreen() -> None:
     if not _has_local_sample_data():
         print("main window skipped: tests/sample_data is local and not committed")
@@ -95,6 +141,12 @@ def test_main_window_offscreen() -> None:
         window.auto_index.load_phase_labels(PHASE_LABELS)
     window.load_directory(SAMPLE_DIR)
     assert window.current_record is not None
+    # 切换到 B 相后主图应只显示 B
+    window._focus_phase("B")
+    assert window.waveform_view.active_phase == "B"
+    assert window.phase_buttons["B"].isChecked()
+    assert window.waveform_view.phase_plots["B"].plot.isVisible()
+    assert not window.waveform_view.phase_plots["A"].plot.isVisible()
     # 模拟标注：A 相设为 gold 并保存
     window.phase_panels["A"].set_status_key("gold")
     window.save_current()
@@ -108,5 +160,7 @@ def test_main_window_offscreen() -> None:
 if __name__ == "__main__":
     test_decoder()
     test_label_store()
+    test_app_icon_assets()
+    test_phase_switch_view()
     test_main_window_offscreen()
     print("all smoke tests passed")
