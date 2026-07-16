@@ -26,6 +26,9 @@ wavefront_stage0_analysis/*.json
 # Annotation tool local artifacts (raw recordings and personal labels stay local)
 annotation_tool/tests/sample_data/
 gold_labels.csv
+annotation_tool/build/
+annotation_tool/dist/
+annotation_tool/*.spec.bak
 
 # Local experiment scratch outputs
 runs/

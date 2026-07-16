@@ -10,6 +10,7 @@ import numpy as np
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QSplitter,
     QStatusBar,
     QVBoxLayout,
@@ -32,7 +34,30 @@ from PySide6.QtWidgets import (
 from .all_decoder import WaveRecord, decode_all_file
 from .auto_labels import AutoLabelIndex
 from .label_store import GoldLabel, GoldLabelStore
-from .waveform_view import PHASES, WaveformView
+from .resources import load_app_icon
+from .waveform_view import PHASES, PHASE_COLORS, WaveformView
+
+# 相切换按钮：活动相高亮，其余弱化（贴近截图中的单窗切换交互）
+_PHASE_BTN_STYLE = """
+QPushButton {{
+    background-color: #2a3036;
+    color: #c5ccd3;
+    border: 1px solid #3a424a;
+    border-radius: 4px;
+    padding: 10px 0;
+    font-size: 14px;
+    font-weight: 600;
+}}
+QPushButton:hover {{
+    background-color: #343b42;
+    border-color: {accent};
+}}
+QPushButton:checked {{
+    background-color: #6b2d3c;
+    color: #ffffff;
+    border-color: {accent};
+}}
+"""
 
 PRIORITY_TEXT = {0: "最差样本", 1: "复核队列", 2: ""}
 STATUS_TEXT = {"gold": "✔ gold", "unsure": "? 存疑", "reject": "✘ 拒绝"}
@@ -76,6 +101,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("行波波头 Gold 标注工具")
         self.resize(1500, 900)
+        self.setWindowIcon(load_app_icon())
 
         self.auto_index = AutoLabelIndex()
         self.store: GoldLabelStore | None = None
@@ -86,6 +112,7 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self._build_shortcuts()
+        self._sync_phase_buttons("A")
 
     # ---------- UI 构建 ----------
 
@@ -122,12 +149,31 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self.filter_edit)
         left_layout.addWidget(self.file_list)
 
-        # 中间：波形视图
+        # 中间：单相波形视图（A/B/C 切换显示）
         self.waveform_view = WaveformView()
         self.waveform_view.goldChanged.connect(self._on_gold_changed)
         self.waveform_view.phaseFocused.connect(self._on_phase_focused)
 
-        # 底部：三相标注面板 + 操作按钮
+        # 相切换条：同一时刻只展开一相，避免三联图挤占标注精度
+        phase_switch = QWidget()
+        phase_switch_layout = QHBoxLayout(phase_switch)
+        phase_switch_layout.setContentsMargins(4, 4, 4, 2)
+        phase_switch_layout.setSpacing(8)
+        self.phase_button_group = QButtonGroup(self)
+        self.phase_button_group.setExclusive(True)
+        self.phase_buttons: dict[str, QPushButton] = {}
+        for phase in PHASES:
+            button = QPushButton(f"{phase} 相")
+            button.setCheckable(True)
+            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            button.setMinimumHeight(40)
+            button.setStyleSheet(_PHASE_BTN_STYLE.format(accent=PHASE_COLORS[phase]))
+            button.clicked.connect(lambda _checked=False, p=phase: self._focus_phase(p))
+            self.phase_button_group.addButton(button)
+            self.phase_buttons[phase] = button
+            phase_switch_layout.addWidget(button)
+
+        # 底部：三相标注面板 + 操作按钮（面板始终可见，便于跨相对照）
         bottom = QWidget()
         bottom_layout = QHBoxLayout(bottom)
         bottom_layout.setContentsMargins(4, 2, 4, 2)
@@ -154,6 +200,7 @@ class MainWindow(QMainWindow):
         center_layout = QVBoxLayout(center)
         center_layout.setContentsMargins(0, 0, 0, 0)
         center_layout.addWidget(self.waveform_view, stretch=1)
+        center_layout.addWidget(phase_switch)
         center_layout.addWidget(bottom)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -359,11 +406,17 @@ class MainWindow(QMainWindow):
         self._refresh_phase_panel(phase)
 
     def _on_phase_focused(self, phase: str) -> None:
+        self._sync_phase_buttons(phase)
         for name, panel in self.phase_panels.items():
             panel.setStyleSheet("QGroupBox { border: 1px solid #ff5252; }" if name == phase else "")
 
+    def _sync_phase_buttons(self, phase: str) -> None:
+        button = self.phase_buttons.get(phase)
+        if button is not None and not button.isChecked():
+            button.setChecked(True)
+
     def _focus_phase(self, phase: str) -> None:
-        self.waveform_view.active_phase = phase
+        self.waveform_view.set_active_phase(phase, emit_focus=False)
         self._on_phase_focused(phase)
 
     def _toggle_region(self) -> None:

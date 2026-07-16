@@ -9,6 +9,7 @@ from pathlib import Path
 from PySide6.QtWidgets import QApplication
 
 from .main_window import MainWindow
+from .resources import load_app_icon
 
 
 def main() -> int:
@@ -24,6 +25,8 @@ def main() -> int:
 
     app = QApplication(sys.argv)
     app.setApplicationName("WavefrontGoldAnnotator")
+    app.setOrganizationName("WavefrontCNN")
+    app.setWindowIcon(load_app_icon())
     window = MainWindow()
 
     for csv_path in args.auto_labels:

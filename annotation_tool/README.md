@@ -10,12 +10,13 @@
 | 功能 | 说明 |
 |---|---|
 | 目录选择 | 递归扫描所选目录下全部 `.all` / `.vall` 录波文件 |
-| 波形可视化 | 三相联动视图，峰值降采样 + 视口裁剪，缩放平移流畅 |
+| 波形可视化 | **ABC 单窗切换**：主图同一时刻只显示活动相；下方 `A 相 / B 相 / C 相` 按钮或 `1/2/3` 换相；各相卡尺与区间状态独立保留 |
 | 卡尺标注 | 每相一条可拖动红色卡尺，双击落点，←/→ 逐点微调（Shift 步长 10） |
 | 框线区间 | `R` 键在卡尺附近开/关 `LinearRegionItem`，用于圈定搜索窗或存疑范围 |
 | 导数辅助 | 可叠加 &#124;di/dt&#124; 曲线，辅助定位波头突变沿 |
 | 自动标签对照 | 可加载 `phase_labels.csv`（紫色点划线 + 各检测器候选虚线）、`review_queue.csv`、`stage0_worst30.csv`，文件列表按复核优先级排序 |
 | CSV 同步 | 每次保存立即原子写入录波目录下的 `gold_labels.csv`（临时文件 + 替换，崩溃不丢数据），主键 `(file_name, phase)` upsert |
+| 应用图标 | 开发运行与打包产物共用 `wavefront_annotator/assets/app_icon.*`（窗口 / 任务栏 / exe 图标） |
 
 ## 安装与启动
 
@@ -43,6 +44,18 @@ python -m venv .venv
 run_annotator.bat
 ```
 
+## 打包（嵌入应用图标）
+
+```bash
+# macOS / Linux
+./build_annotator.sh
+
+# Windows
+build_annotator.bat
+```
+
+产物位于 `dist/WavefrontGoldAnnotator`（Windows 为 `.exe`）。PyInstaller 规格 `wavefront_annotator.spec` 已将 `assets/app_icon.ico`（或 PNG）写入可执行文件图标，并打包 `assets/` 供运行时 `QApplication` / 主窗口加载。
+
 命令行直接指定目录与参考 CSV：
 
 ```bat
@@ -56,7 +69,7 @@ run_annotator.bat
 
 | 按键 | 动作 |
 |---|---|
-| `1` / `2` / `3` | 切换活动相 A / B / C |
+| `1` / `2` / `3` 或点击相按钮 | 切换主图显示的活动相 A / B / C |
 | 双击波形 | 在该相放置卡尺 |
 | `←` / `→`（`Shift` 加速） | 卡尺逐点微调 |
 | `G` / `U` / `X` | 活动相状态设为 gold / unsure / reject |
